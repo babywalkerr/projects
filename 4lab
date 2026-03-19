@@ -1,0 +1,356 @@
+/*
+ * Lab 4 - Cyclic singly linked list
+ * Dynamic data structures
+ */
+
+#include <conio.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <Windows.h>
+#include <stdbool.h>
+#include <io.h>
+#include <fcntl.h>
+
+#define SIZE_MENU 6
+#define COLOR_RESET    L"\033[0m"
+#define COLOR_CYAN     L"\033[96m"
+#define COLOR_GREEN    L"\033[92m"
+#define COLOR_YELLOW   L"\033[93m"
+#define COLOR_RED      L"\033[91m"
+#define COLOR_BOLD     L"\033[1m"
+#define COLOR_UNDERLINE L"\033[4m"
+#define COLOR_GRAY     L"\033[90m"
+
+typedef struct Node {
+    int data;
+    struct Node* next;
+} Node;
+
+static Node* head = NULL;
+
+void Menu(const wchar_t** list_menu, int point);
+void AddElement(void);
+void RemoveElement(void);
+void DisplayList(void);
+void ClearList(void);
+void ClearListAction(void);
+void AboutProgram(void);
+void ClearInputBuffer(void);
+void PrintHeader(const wchar_t* title);
+void SetCursorPosition(int x, int y);
+
+int main(void) {
+    // _O_U16TEXT - единственный надёжный способ вывода Unicode на Windows
+    _setmode(_fileno(stdout), _O_U16TEXT);
+    _setmode(_fileno(stdin), _O_U16TEXT);
+
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD dwMode = 0;
+    GetConsoleMode(hOut, &dwMode);
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(hOut, dwMode);
+
+    short is_exit = 0;
+    int point = 0;
+
+    const wchar_t** list_menu = (const wchar_t**)malloc(SIZE_MENU * sizeof(wchar_t*));
+    if (!list_menu) {
+        wprintf(L"Ошибка выделения памяти!\n");
+        return 1;
+    }
+    list_menu[0] = L"Добавить элемент";
+    list_menu[1] = L"Удалить элемент";
+    list_menu[2] = L"Показать список";
+    list_menu[3] = L"Очистить список";
+    list_menu[4] = L"О программе";
+    list_menu[5] = L"Выход";
+
+    system("cls");
+    Menu(list_menu, point);
+
+    const int MENU_OFFSET = 7;
+
+    while (!is_exit) {
+        // _getch не зависит от режима stdout, работает нормально
+        int key = _getch();
+        int old_point = point;
+        switch (key) {
+            case 72:
+                point = (point == 0) ? SIZE_MENU - 1 : point - 1;
+                SetCursorPosition(0, MENU_OFFSET + old_point);
+                wprintf(L"%s|      %s%-46s%s  |%s", COLOR_CYAN, COLOR_GRAY, list_menu[old_point], COLOR_CYAN, COLOR_RESET);
+                SetCursorPosition(0, MENU_OFFSET + point);
+                wprintf(L"%s%s|  >>  %s%-45s%s  |%s", COLOR_BOLD, COLOR_CYAN, COLOR_GREEN, list_menu[point], COLOR_CYAN, COLOR_RESET);
+                break;
+            case 80:
+                point = (point == SIZE_MENU - 1) ? 0 : point + 1;
+                SetCursorPosition(0, MENU_OFFSET + old_point);
+                wprintf(L"%s|      %s%-46s%s  |%s", COLOR_CYAN, COLOR_GRAY, list_menu[old_point], COLOR_CYAN, COLOR_RESET);
+                SetCursorPosition(0, MENU_OFFSET + point);
+                wprintf(L"%s%s|  >>  %s%-45s%s  |%s", COLOR_BOLD, COLOR_CYAN, COLOR_GREEN, list_menu[point], COLOR_CYAN, COLOR_RESET);
+                break;
+            case 13:
+                system("cls");
+                switch (point) {
+                    case 0: AddElement(); break;
+                    case 1: RemoveElement(); break;
+                    case 2: DisplayList(); break;
+                    case 3: ClearListAction(); break;
+                    case 4: AboutProgram(); break;
+                    case 5: is_exit = 1; break;
+                }
+                if (point != 5) {
+                    wprintf(L"\n%s%s[Нажмите любую клавишу для возврата...]%s",
+                           COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
+                    _getch();
+                }
+                if (!is_exit) {
+                    system("cls");
+                    Menu(list_menu, point);
+                }
+                break;
+            case 27:
+                is_exit = 1;
+                break;
+        }
+    }
+
+    ClearList();
+    free(list_menu);
+
+    wprintf(L"\n%s%s", COLOR_BOLD, COLOR_CYAN);
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"|  Программа завершена. Спасибо за использование!      |\n");
+    wprintf(L"|  %sЛабораторная работа №4 - 2025%s                       |\n", COLOR_YELLOW, COLOR_CYAN);
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"%s", COLOR_RESET);
+    Beep(800, 150);
+    Sleep(100);
+    Beep(1000, 200);
+    return 0;
+}
+
+void SetCursorPosition(int x, int y) {
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    COORD coord = {(short)x, (short)y};
+    SetConsoleCursorPosition(hOut, coord);
+}
+
+void Menu(const wchar_t** list_menu, int point) {
+    wprintf(L"%s%s", COLOR_BOLD, COLOR_CYAN);
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"|                                                      |\n");
+    wprintf(L"|  ЦИКЛИЧЕСКИЙ ОДНОСВЯЗНЫЙ СПИСОК                      |\n");
+    wprintf(L"|  Динамические структуры данных                       |\n");
+    wprintf(L"|  %s~ Лабораторная работа №4 ~%s                          |\n", COLOR_YELLOW, COLOR_CYAN);
+    wprintf(L"|                                                      |\n");
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"%s", COLOR_RESET);
+
+    for (int i = 0; i < SIZE_MENU; i++) {
+        if (point == i) {
+            wprintf(L"%s%s|  >>  %s%-45s%s  |%s\n",
+                   COLOR_BOLD, COLOR_CYAN, COLOR_GREEN, list_menu[i], COLOR_CYAN, COLOR_RESET);
+        } else {
+            wprintf(L"%s|      %s%-46s%s  |%s\n",
+                   COLOR_CYAN, COLOR_GRAY, list_menu[i], COLOR_CYAN, COLOR_RESET);
+        }
+    }
+
+    wprintf(L"%s%s+------------------------------------------------------+\n", COLOR_BOLD, COLOR_CYAN);
+    wprintf(L"|  Управление: [Up/Down] выбор | [Enter] | [Esc] выход |\n");
+    wprintf(L"+------------------------------------------------------+%s\n", COLOR_RESET);
+}
+
+void PrintHeader(const wchar_t* title) {
+    wprintf(L"\n%s%s", COLOR_BOLD, COLOR_CYAN);
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"|  %-52s|\n", title);
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"%s\n", COLOR_RESET);
+}
+
+void ClearInputBuffer(void) {
+    wint_t c;
+    while ((c = getwchar()) != L'\n' && c != WEOF) {}
+}
+
+void AddElement(void) {
+    PrintHeader(L"ДОБАВЛЕНИЕ ЭЛЕМЕНТА");
+
+    int value;
+    wprintf(L"%s> Введите целое число для добавления: %s", COLOR_CYAN, COLOR_RESET);
+
+    if (wscanf(L"%d", &value) != 1) {
+        ClearInputBuffer();
+        wprintf(L"%s[ОШИБКА] Введите корректное целое число.%s\n", COLOR_RED, COLOR_RESET);
+        Beep(400, 200);
+        return;
+    }
+    ClearInputBuffer();
+
+    Node* new_node = (Node*)malloc(sizeof(Node));
+    if (!new_node) {
+        wprintf(L"%s[ОШИБКА] Не удалось выделить память!%s\n", COLOR_RED, COLOR_RESET);
+        Beep(400, 200);
+        return;
+    }
+    new_node->data = value;
+
+    if (head == NULL) {
+        new_node->next = new_node;
+        head = new_node;
+    } else {
+        Node* current = head;
+        while (current->next != head) {
+            current = current->next;
+        }
+        current->next = new_node;
+        new_node->next = head;
+    }
+
+    wprintf(L"\n%s%s[+] Элемент %d успешно добавлен в список!%s\n", COLOR_BOLD, COLOR_GREEN, value, COLOR_RESET);
+    Beep(800, 100);
+}
+
+void RemoveElement(void) {
+    PrintHeader(L"УДАЛЕНИЕ ЭЛЕМЕНТА");
+
+    if (head == NULL) {
+        wprintf(L"%s[!] Список пуст. Нечего удалять.%s\n", COLOR_YELLOW, COLOR_RESET);
+        Beep(400, 200);
+        return;
+    }
+
+    int value;
+    wprintf(L"%s> Введите значение элемента для удаления: %s", COLOR_CYAN, COLOR_RESET);
+
+    if (wscanf(L"%d", &value) != 1) {
+        ClearInputBuffer();
+        wprintf(L"%s[ОШИБКА] Введите корректное целое число.%s\n", COLOR_RED, COLOR_RESET);
+        Beep(400, 200);
+        return;
+    }
+    ClearInputBuffer();
+
+    Node* prev = NULL;
+    Node* current = head;
+
+    do {
+        if (current->data == value) {
+            if (prev == NULL) {
+                if (current->next == current) {
+                    head = NULL;
+                } else {
+                    Node* last = head;
+                    while (last->next != head) {
+                        last = last->next;
+                    }
+                    last->next = head->next;
+                    head = head->next;
+                }
+            } else {
+                prev->next = current->next;
+            }
+            free(current);
+            wprintf(L"\n%s%s[+] Элемент %d успешно удалён!%s\n", COLOR_BOLD, COLOR_GREEN, value, COLOR_RESET);
+            Beep(800, 100);
+            return;
+        }
+        prev = current;
+        current = current->next;
+    } while (current != head);
+
+    wprintf(L"\n%s[!] Элемент %d не найден в списке.%s\n", COLOR_YELLOW, value, COLOR_RESET);
+    Beep(400, 200);
+}
+
+void DisplayList(void) {
+    PrintHeader(L"СОДЕРЖИМОЕ СПИСКА");
+
+    if (head == NULL) {
+        wprintf(L"%s[!] Список пуст.%s\n", COLOR_YELLOW, COLOR_RESET);
+        return;
+    }
+
+    wprintf(L"%sЭлементы циклического списка:%s\n\n", COLOR_BOLD, COLOR_RESET);
+    wprintf(L"%s  ", COLOR_CYAN);
+
+    Node* current = head;
+    int count = 0;
+    do {
+        wprintf(L"%d", current->data);
+        count++;
+        if (current->next != head) {
+            wprintf(L" %s->%s ", COLOR_GRAY, COLOR_CYAN);
+        }
+        current = current->next;
+    } while (current != head);
+
+    wprintf(L"%s\n\n", COLOR_RESET);
+    wprintf(L"%s  Всего элементов: %s%d%s\n", COLOR_GREEN, COLOR_YELLOW, count, COLOR_RESET);
+    wprintf(L"%s  (последний -> первый: цикл)%s\n", COLOR_GRAY, COLOR_RESET);
+}
+
+void ClearList(void) {
+    if (head == NULL) return;
+    Node* current = head;
+    Node* next_node;
+    do {
+        next_node = current->next;
+        free(current);
+        current = next_node;
+    } while (current != head);
+    head = NULL;
+}
+
+void ClearListAction(void) {
+    PrintHeader(L"ОЧИСТКА СПИСКА");
+    if (head == NULL) {
+        wprintf(L"%s[!] Список уже пуст.%s\n", COLOR_YELLOW, COLOR_RESET);
+        Beep(400, 200);
+        return;
+    }
+    ClearList();
+    wprintf(L"\n%s%s[+] Список успешно очищен!%s\n", COLOR_BOLD, COLOR_GREEN, COLOR_RESET);
+    Beep(800, 100);
+}
+
+void AboutProgram(void) {
+    PrintHeader(L"ИНФОРМАЦИЯ О ПРОГРАММЕ");
+
+    wprintf(L"%s", COLOR_BOLD);
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"|  ЦИКЛИЧЕСКИЙ ОДНОСВЯЗНЫЙ СПИСОК                      |\n");
+    wprintf(L"+------------------------------------------------------+\n");
+    wprintf(L"%s", COLOR_RESET);
+
+    wprintf(L"|                                                      |\n");
+    wprintf(L"|  %s%sНазначение:%s                                         |\n",
+           COLOR_BOLD, COLOR_UNDERLINE, COLOR_RESET);
+    wprintf(L"|     Демонстрация работы с динамической памятью       |\n");
+    wprintf(L"|     и циклическим односвязным списком                |\n");
+    wprintf(L"|                                                      |\n");
+    wprintf(L"|  %s%sСтруктура:%s                                          |\n",
+           COLOR_BOLD, COLOR_UNDERLINE, COLOR_RESET);
+    wprintf(L"|     Узел: data (int) + next (указатель)              |\n");
+    wprintf(L"|     Последний элемент указывает на первый            |\n");
+    wprintf(L"|                                                      |\n");
+    wprintf(L"|  %s%sВозможности:%s                                        |\n",
+           COLOR_BOLD, COLOR_UNDERLINE, COLOR_RESET);
+    wprintf(L"|     > Добавление элемента в конец списка             |\n");
+    wprintf(L"|     > Удаление элемента по значению                  |\n");
+    wprintf(L"|     > Просмотр всех элементов                        |\n");
+    wprintf(L"|     > Очистка списка                                 |\n");
+    wprintf(L"|                                                      |\n");
+    wprintf(L"|  %s%sУправление:%s                                         |\n",
+           COLOR_BOLD, COLOR_UNDERLINE, COLOR_RESET);
+    wprintf(L"|     [Up]/[Down] - навигация по меню                  |\n");
+    wprintf(L"|     [Enter]     - выбор пункта                       |\n");
+    wprintf(L"|     [Esc]       - выход из программы                 |\n");
+    wprintf(L"|                                                      |\n");
+    wprintf(L"|  Made by Maxim Epifanov                              |\n");
+    wprintf(L"|  %sЛабораторная работа №4 - 2025%s                       |\n", COLOR_YELLOW, COLOR_BOLD);
+    wprintf(L"%s+------------------------------------------------------+\n", COLOR_BOLD);
+    wprintf(L"%s", COLOR_RESET);
+}
