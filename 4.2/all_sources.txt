@@ -1,0 +1,817 @@
+============================================================
+FILE: main.py
+============================================================
+
+"""
+main.py — GUI для циклического односвязного списка
+Лабораторная работа 4.2
+
+Запуск: python3 main.py
+"""
+
+import tkinter as tk
+import math
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from modules.cyclic_list_py import CyclicListPy
+
+try:
+    from modules.cyclic_list_cpp import CyclicListCpp
+    _CPP_OK = True
+except Exception:
+    _CPP_OK = False
+
+MODULE_LABELS = {
+    "python":      "Python",
+    "cpp_dynamic": "C++ (dynamic structs)",
+    "cpp_stl":     "C++ (STL std::list)",
+}
+
+# Цвета — все явные, не зависят от системной темы
+C_BG        = "#f5f5f5"
+C_PANEL     = "#ffffff"
+C_HEADER    = "#2c6fad"
+C_HEADER2   = "#dde8f5"
+C_TEXT      = "#1a1a1a"
+C_GRAY      = "#555555"
+C_BLUE      = "#1e6fba"
+C_GREEN_BTN = "#4caf50"
+C_RED_BTN   = "#e53935"
+C_ORG_BTN   = "#fb8c00"
+C_WHITE     = "#ffffff"
+C_BORDER    = "#b0b8c4"
+
+
+def _load_module(key):
+    if key == "python":
+        return CyclicListPy()
+    if not _CPP_OK:
+        return None
+    dll_map = {"cpp_dynamic": "cyclic_list", "cpp_stl": "cyclic_list_stl"}
+    try:
+        return CyclicListCpp(dll_map[key])
+    except Exception:
+        return None
+
+
+def _btn(parent, text, bg, command):
+    """Кнопка в цветной рамке — работает корректно на macOS."""
+    border = tk.Frame(parent, bg=bg, padx=2, pady=2)
+    tk.Button(
+        border, text=text, command=command,
+        bg=bg, fg="#1a1a1a", relief=tk.FLAT,
+        font=("Helvetica", 11, "bold"), pady=5,
+        activebackground=bg, activeforeground="#1a1a1a",
+        cursor="hand2", bd=0,
+    ).pack(fill=tk.X)
+    return border
+
+
+def _label(parent, text, font=None, fg=None, anchor=tk.W):
+    return tk.Label(
+        parent, text=text, bg=C_PANEL,
+        fg=fg or C_TEXT,
+        font=font or ("Helvetica", 10),
+        anchor=anchor,
+    )
+
+
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Лабораторная работа 4.2 — Циклический список")
+        self.configure(bg=C_BG)
+        self.minsize(860, 520)
+        self.geometry("1050x630")
+
+        self._modules = {}
+        for key in ("python", "cpp_dynamic", "cpp_stl"):
+            m = _load_module(key)
+            if m is not None:
+                self._modules[key] = m
+
+        self._module_key = tk.StringVar(value="python")
+
+        self._build_ui()
+        self.update()
+        self._refresh()
+        self.canvas.bind("<Configure>", lambda _: self._refresh())
+
+    # ── UI ────────────────────────────────────────────────────────────────────
+
+    def _build_ui(self):
+        self._build_header()
+        self._build_module_bar()
+
+        main = tk.Frame(self, bg=C_BG)
+        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=8)
+        self._build_controls(main)
+        self._build_canvas_area(main)
+
+        self._status_var = tk.StringVar(value="Готово")
+        tk.Label(
+            self, textvariable=self._status_var,
+            bg="#e0e0e0", fg=C_TEXT, anchor=tk.W,
+            font=("Helvetica", 9), pady=4, padx=10,
+        ).pack(fill=tk.X, side=tk.BOTTOM)
+
+    def _build_header(self):
+        f = tk.Frame(self, bg=C_HEADER, pady=10)
+        f.pack(fill=tk.X)
+        tk.Label(f, text="Циклический односвязный список",
+                 bg=C_HEADER, fg=C_WHITE,
+                 font=("Helvetica", 14, "bold")).pack(side=tk.LEFT, padx=14)
+        tk.Label(f, text="Лабораторная работа 4.2",
+                 bg=C_HEADER, fg="#c8dfff",
+                 font=("Helvetica", 10)).pack(side=tk.RIGHT, padx=14)
+
+    def _build_module_bar(self):
+        f = tk.Frame(self, bg=C_HEADER2, pady=7)
+        f.pack(fill=tk.X)
+        tk.Label(f, text="Модуль реализации:",
+                 bg=C_HEADER2, fg=C_TEXT,
+                 font=("Helvetica", 10, "bold")).pack(side=tk.LEFT, padx=12)
+        for key, label in MODULE_LABELS.items():
+            available = key in self._modules
+            text = label if available else f"{label}  [DLL не найдена]"
+            tk.Radiobutton(
+                f, text=text,
+                variable=self._module_key, value=key,
+                state=tk.NORMAL if available else tk.DISABLED,
+                bg=C_HEADER2, fg=C_TEXT,
+                selectcolor=C_HEADER2,
+                activebackground=C_HEADER2,
+                font=("Helvetica", 10),
+                command=self._on_module_change,
+            ).pack(side=tk.LEFT, padx=10)
+
+    def _build_controls(self, parent):
+        panel = tk.Frame(parent, bg=C_PANEL, width=240,
+                         highlightbackground=C_BORDER,
+                         highlightthickness=1)
+        panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        panel.pack_propagate(False)
+
+        # ── Операции ─────────────────────────────────────────────────────────
+        self._section(panel, "Операции")
+
+        tk.Label(panel, text="Значение:", bg=C_PANEL, fg=C_GRAY,
+                 font=("Helvetica", 9)).pack(anchor=tk.W, padx=12, pady=(4, 2))
+
+        self._entry = tk.Entry(
+            panel, font=("Helvetica", 12),
+            bg=C_WHITE, fg=C_TEXT,
+            insertbackground=C_TEXT,
+            relief=tk.SOLID, bd=1,
+        )
+        self._entry.pack(fill=tk.X, padx=12, pady=(0, 8))
+        self._entry.bind("<Return>", lambda _: self._op_add())
+
+        _btn(panel, "Добавить",       C_GREEN_BTN, self._op_add   ).pack(fill=tk.X, padx=12, pady=2)
+        _btn(panel, "Удалить",        C_RED_BTN,   self._op_remove).pack(fill=tk.X, padx=12, pady=2)
+        tk.Frame(panel, bg=C_BORDER, height=1).pack(fill=tk.X, padx=12, pady=8)
+        _btn(panel, "Очистить список", C_ORG_BTN,  self._op_clear ).pack(fill=tk.X, padx=12, pady=2)
+
+        tk.Frame(panel, bg=C_BORDER, height=1).pack(fill=tk.X, padx=12, pady=10)
+
+        # ── Информация ───────────────────────────────────────────────────────
+        self._section(panel, "Информация")
+
+        def _info_row(label, val_color):
+            r = tk.Frame(panel, bg=C_PANEL)
+            r.pack(fill=tk.X, padx=12, pady=2)
+            tk.Label(r, text=label, bg=C_PANEL, fg=C_GRAY,
+                     font=("Helvetica", 9)).pack(side=tk.LEFT)
+            lbl = tk.Label(r, text="—", bg=C_PANEL, fg=val_color,
+                           font=("Helvetica", 9, "bold"))
+            lbl.pack(side=tk.LEFT, padx=6)
+            return lbl
+
+        self._lbl_size   = _info_row("Размер:", C_BLUE)
+        self._lbl_module = _info_row("Модуль:", C_BLUE)
+
+        tk.Frame(panel, bg=C_BORDER, height=1).pack(fill=tk.X, padx=12, pady=10)
+
+        # ── Легенда ──────────────────────────────────────────────────────────
+        self._section(panel, "Обозначения")
+
+        for color, text in [
+            (C_BLUE,    "■   узел списка"),
+            ("#2e7d32", "→   стрелка next"),
+            ("#b8860b", "- →  last→head (цикл)"),
+        ]:
+            tk.Label(panel, text=text, bg=C_PANEL, fg=color,
+                     font=("Helvetica", 9)).pack(anchor=tk.W, padx=14, pady=2)
+
+    def _section(self, parent, title):
+        tk.Label(parent, text=title, bg=C_PANEL, fg=C_BLUE,
+                 font=("Helvetica", 10, "bold")).pack(
+            anchor=tk.W, padx=12, pady=(8, 2))
+
+    def _build_canvas_area(self, parent):
+        right = tk.Frame(parent, bg=C_BG)
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        tk.Label(right, text="Визуализация", bg=C_BG, fg=C_TEXT,
+                 font=("Helvetica", 10, "bold")).pack(anchor=tk.W, pady=(0, 4))
+
+        self.canvas = tk.Canvas(
+            right, bg=C_WHITE,
+            highlightbackground=C_BORDER,
+            highlightthickness=1,
+        )
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+
+    # ── Логика ────────────────────────────────────────────────────────────────
+
+    def _list(self):
+        return self._modules[self._module_key.get()]
+
+    def _on_module_change(self):
+        self._set_status(f"Модуль: {MODULE_LABELS[self._module_key.get()]}")
+        self._refresh()
+
+    def _op_add(self):
+        raw = self._entry.get().strip()
+        if not raw:
+            self._set_status("Ошибка: введите целое число"); return
+        try:
+            n = int(raw)
+        except ValueError:
+            self._set_status("Ошибка: ожидается целое число"); return
+        self._list().add(n)
+        self._entry.delete(0, tk.END)
+        self._set_status(f"Элемент {n} добавлен")
+        self._refresh()
+
+    def _op_remove(self):
+        raw = self._entry.get().strip()
+        if not raw:
+            self._set_status("Ошибка: введите значение для удаления"); return
+        try:
+            n = int(raw)
+        except ValueError:
+            self._set_status("Ошибка: ожидается целое число"); return
+        if self._list().is_empty():
+            self._set_status("Ошибка: список пуст — нечего удалять"); return
+        if self._list().remove(n):
+            self._entry.delete(0, tk.END)
+            self._set_status(f"Элемент {n} удалён")
+        else:
+            self._set_status(f"Ошибка: элемент {n} не найден в списке")
+        self._refresh()
+
+    def _op_clear(self):
+        if self._list().is_empty():
+            self._set_status("Список уже пуст"); return
+        self._list().clear()
+        self._set_status("Список очищен")
+        self._refresh()
+
+    def _set_status(self, msg):
+        self._status_var.set(msg)
+
+    def _refresh(self):
+        lst = self._list()
+        elements = lst.get_elements()
+        self._lbl_size.configure(text=str(len(elements)))
+        self._lbl_module.configure(
+            text=MODULE_LABELS.get(self._module_key.get(), ""))
+        self._draw(elements)
+
+    # ── Визуализация ──────────────────────────────────────────────────────────
+
+    def _draw(self, elements):
+        self.update_idletasks()
+        c = self.canvas
+        c.delete("all")
+
+        W = c.winfo_width()
+        H = c.winfo_height()
+        if W <= 1 or H <= 1:
+            self.after(50, lambda: self._draw(elements))
+            return
+
+        n = len(elements)
+
+        if n == 0:
+            c.create_text(W / 2, H / 2 - 14, text="Список пуст",
+                          fill="#aaaaaa", font=("Helvetica", 15, "italic"))
+            c.create_text(W / 2, H / 2 + 14,
+                          text="Введите число и нажмите «Добавить»",
+                          fill="#bbbbbb", font=("Helvetica", 10))
+            return
+
+        node_r = max(22, min(36, int(min(W, H) * 0.36 / max(n, 1))))
+        R      = max(node_r * 2.8, min(W, H) / 2 - node_r * 2.6)
+        cx, cy = W / 2, H / 2
+
+        def pos(i):
+            a = math.pi / 2 - i * 2 * math.pi / n
+            return cx + R * math.cos(a), cy - R * math.sin(a)
+
+        positions = [pos(i) for i in range(n)]
+
+        # Стрелки
+        for i in range(n):
+            x1, y1 = positions[i]
+            x2, y2 = positions[(i + 1) % n]
+            is_last = (i == n - 1)
+            color = "#b8860b" if is_last else "#2e7d32"
+            dash  = (6, 4)   if is_last else ()
+
+            if n == 1:
+                lx, ly = x1 + node_r + 6, y1 - node_r - 6
+                r2 = node_r * 0.6
+                c.create_oval(lx - r2, ly - r2, lx + r2, ly + r2,
+                              outline=color, width=2, dash=(5, 3))
+                c.create_line(lx, ly + r2,
+                              x1 + node_r * 0.55, y1 - node_r * 0.55,
+                              fill=color, width=2,
+                              arrow=tk.LAST, arrowshape=(8, 10, 3))
+                continue
+
+            dx, dy = x2 - x1, y2 - y1
+            dist = math.hypot(dx, dy)
+            if dist < 1:
+                continue
+            ndx, ndy = dx / dist, dy / dist
+            ax1 = x1 + ndx * (node_r + 4)
+            ay1 = y1 + ndy * (node_r + 4)
+            ax2 = x2 - ndx * (node_r + 10)
+            ay2 = y2 - ndy * (node_r + 10)
+
+            if is_last and n > 2:
+                mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+                pcx = mx + (mx - cx) * 0.5
+                pcy = my + (my - cy) * 0.5
+                c.create_line(ax1, ay1, pcx, pcy, ax2, ay2,
+                              smooth=True, fill=color, width=2,
+                              arrow=tk.LAST, arrowshape=(9, 11, 4), dash=dash)
+            else:
+                c.create_line(ax1, ay1, ax2, ay2,
+                              fill=color, width=2,
+                              arrow=tk.LAST, arrowshape=(9, 11, 4), dash=dash)
+
+        # Узлы
+        for i, (x, y) in enumerate(positions):
+            is_head = (i == 0)
+            fill    = "#bbdefb" if is_head else "#e8f4fd"
+            lw      = 3        if is_head else 2
+
+            c.create_oval(x - node_r, y - node_r,
+                          x + node_r, y + node_r,
+                          fill=fill, outline=C_BLUE, width=lw)
+
+            fsize = max(9, min(14, node_r - 6))
+            c.create_text(x, y, text=str(elements[i]),
+                          font=("Helvetica", fsize, "bold"), fill="#0d1b2a")
+
+            if is_head:
+                c.create_text(x, y - node_r - 12, text="head",
+                              font=("Helvetica", 8, "bold"), fill=C_BLUE)
+
+        c.create_text(W - 8, 8, text=f"Элементов: {n}",
+                      anchor=tk.NE, fill="#999999", font=("Helvetica", 8))
+
+
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()
+
+
+============================================================
+FILE: modules/cyclic_list_py.py
+============================================================
+
+"""
+Модуль: cyclic_list_py.py
+Реализация циклического односвязного списка на чистом Python.
+Лабораторная работа 4.2
+"""
+
+
+class _Node:
+    """Узел циклического списка."""
+    __slots__ = ("data", "next")
+
+    def __init__(self, data: int):
+        self.data: int = data
+        self.next: "_Node | None" = None
+
+
+class CyclicListPy:
+    """
+    Циклический односвязный список (Python-реализация).
+    Последний узел хранит ссылку на head.
+    """
+
+    def __init__(self):
+        self._head: _Node | None = None
+        self._size: int = 0
+
+    # ── Добавление в конец ────────────────────────────────────────────────────
+    def add(self, value: int) -> None:
+        new_node = _Node(value)
+        if self._head is None:
+            new_node.next = new_node          # единственный узел → сам на себя
+            self._head = new_node
+        else:
+            current = self._head
+            while current.next is not self._head:
+                current = current.next
+            current.next = new_node
+            new_node.next = self._head
+        self._size += 1
+
+    # ── Удаление первого вхождения value ─────────────────────────────────────
+    def remove(self, value: int) -> bool:
+        if self._head is None:
+            return False
+
+        prev = None
+        current = self._head
+
+        while True:
+            if current.data == value:
+                if prev is None:                      # удаляем head
+                    if current.next is current:       # единственный узел
+                        self._head = None
+                    else:
+                        last = self._head
+                        while last.next is not self._head:
+                            last = last.next
+                        last.next = self._head.next
+                        self._head = self._head.next
+                else:
+                    prev.next = current.next
+                self._size -= 1
+                return True
+
+            prev = current
+            current = current.next
+            if current is self._head:
+                break
+
+        return False
+
+    # ── Вспомогательные методы ────────────────────────────────────────────────
+    def get_elements(self) -> list[int]:
+        """Вернуть все элементы в порядке обхода."""
+        if self._head is None:
+            return []
+        result: list[int] = []
+        current = self._head
+        while True:
+            result.append(current.data)
+            current = current.next
+            if current is self._head:
+                break
+        return result
+
+    def get_size(self) -> int:
+        return self._size
+
+    def is_empty(self) -> bool:
+        return self._head is None
+
+    def clear(self) -> None:
+        self._head = None
+        self._size = 0
+
+
+============================================================
+FILE: modules/cyclic_list_cpp.py
+============================================================
+
+"""
+Модуль: cyclic_list_cpp.py
+ctypes-адаптер для C++ разделяемых библиотек.
+Предоставляет единый интерфейс независимо от того, используется
+dynamic-structs DLL или STL DLL.
+
+Интерфейс идентичен CyclicListPy:
+  add(value)       → None
+  remove(value)    → bool
+  get_elements()   → list[int]
+  get_size()       → int
+  is_empty()       → bool
+  clear()          → None
+"""
+
+import ctypes
+import os
+import platform
+
+
+def _dll_name(base: str) -> str:
+    """Вернуть платформо-зависимое имя библиотеки."""
+    system = platform.system()
+    if system == "Windows":
+        return f"{base}.dll"
+    elif system == "Darwin":
+        return f"{base}.dylib"   # macOS: без префикса lib (как собирает build.sh)
+    else:
+        return f"lib{base}.so"
+
+
+def _setup_signatures(lib: ctypes.CDLL) -> None:
+    """Объявить типы аргументов и возвращаемых значений функций DLL."""
+    lib.create_list.restype  = ctypes.c_void_p
+    lib.create_list.argtypes = []
+
+    lib.destroy_list.restype  = None
+    lib.destroy_list.argtypes = [ctypes.c_void_p]
+
+    lib.add_element.restype  = None
+    lib.add_element.argtypes = [ctypes.c_void_p, ctypes.c_int]
+
+    lib.remove_element.restype  = ctypes.c_int
+    lib.remove_element.argtypes = [ctypes.c_void_p, ctypes.c_int]
+
+    lib.get_size.restype  = ctypes.c_int
+    lib.get_size.argtypes = [ctypes.c_void_p]
+
+    lib.get_elements.restype  = None
+    lib.get_elements.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.c_int,
+    ]
+
+    lib.clear_list.restype  = None
+    lib.clear_list.argtypes = [ctypes.c_void_p]
+
+
+class CyclicListCpp:
+    """
+    Обёртка над C++ DLL.
+    Параметр dll_name: 'cyclic_list' (dynamic) или 'cyclic_list_stl' (STL).
+    """
+
+    def __init__(self, dll_name: str):
+        # Ищем DLL в директории этого модуля
+        module_dir = os.path.dirname(os.path.abspath(__file__))
+        dll_path   = os.path.join(module_dir, _dll_name(dll_name))
+
+        if not os.path.exists(dll_path):
+            raise FileNotFoundError(f"Библиотека не найдена: {dll_path}")
+
+        self._lib    = ctypes.CDLL(dll_path)
+        _setup_signatures(self._lib)
+        self._handle = self._lib.create_list()
+
+    # ── Операции ─────────────────────────────────────────────────────────────
+
+    def add(self, value: int) -> None:
+        self._lib.add_element(self._handle, value)
+
+    def remove(self, value: int) -> bool:
+        return bool(self._lib.remove_element(self._handle, value))
+
+    def get_elements(self) -> list[int]:
+        size = self._lib.get_size(self._handle)
+        if size == 0:
+            return []
+        buf = (ctypes.c_int * size)()
+        self._lib.get_elements(self._handle, buf, size)
+        return list(buf)
+
+    def get_size(self) -> int:
+        return self._lib.get_size(self._handle)
+
+    def is_empty(self) -> bool:
+        return self._lib.get_size(self._handle) == 0
+
+    def clear(self) -> None:
+        self._lib.clear_list(self._handle)
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
+
+    def __del__(self):
+        if hasattr(self, "_lib") and hasattr(self, "_handle") and self._handle:
+            self._lib.destroy_list(self._handle)
+            self._handle = None
+
+
+============================================================
+FILE: modules/cyclic_list.cpp
+============================================================
+
+/*
+ * cyclic_list.cpp
+ * Циклический односвязный список — реализация на динамических структурах.
+ * Экспортируется как разделяемая библиотека (DLL/so).
+ *
+ * Компиляция (Windows/MinGW):
+ *   g++ -shared -o cyclic_list.dll cyclic_list.cpp -std=c++17
+ * Компиляция (Linux):
+ *   g++ -shared -fPIC -o cyclic_list.so cyclic_list.cpp -std=c++17
+ */
+
+#include <cstdlib>
+#include <cstring>
+
+#ifdef _WIN32
+    #define EXPORT extern "C" __declspec(dllexport)
+#else
+    #define EXPORT extern "C"
+#endif
+
+// ── Внутренние структуры ─────────────────────────────────────────────────────
+
+struct Node {
+    int   data;
+    Node* next;
+};
+
+struct CyclicList {
+    Node* head;
+    int   size;
+};
+
+// ── API ───────────────────────────────────────────────────────────────────────
+
+EXPORT void* create_list() {
+    CyclicList* list = new CyclicList{nullptr, 0};
+    return list;
+}
+
+EXPORT void destroy_list(void* handle) {
+    if (!handle) return;
+    CyclicList* list = reinterpret_cast<CyclicList*>(handle);
+
+    if (list->head) {
+        Node* current = list->head;
+        Node* next_node;
+        do {
+            next_node = current->next;
+            delete current;
+            current = next_node;
+        } while (current != list->head);
+    }
+    delete list;
+}
+
+EXPORT void add_element(void* handle, int value) {
+    CyclicList* list = reinterpret_cast<CyclicList*>(handle);
+    Node* new_node = new Node{value, nullptr};
+
+    if (list->head == nullptr) {
+        new_node->next = new_node;
+        list->head = new_node;
+    } else {
+        Node* current = list->head;
+        while (current->next != list->head)
+            current = current->next;
+        current->next = new_node;
+        new_node->next = list->head;
+    }
+    list->size++;
+}
+
+// Возвращает 1 если элемент найден и удалён, 0 если не найден.
+EXPORT int remove_element(void* handle, int value) {
+    CyclicList* list = reinterpret_cast<CyclicList*>(handle);
+    if (list->head == nullptr) return 0;
+
+    Node* prev    = nullptr;
+    Node* current = list->head;
+
+    do {
+        if (current->data == value) {
+            if (prev == nullptr) {                          // удаляем head
+                if (current->next == current) {            // единственный
+                    list->head = nullptr;
+                } else {
+                    Node* last = list->head;
+                    while (last->next != list->head)
+                        last = last->next;
+                    last->next    = list->head->next;
+                    list->head    = list->head->next;
+                }
+            } else {
+                prev->next = current->next;
+            }
+            delete current;
+            list->size--;
+            return 1;
+        }
+        prev    = current;
+        current = current->next;
+    } while (current != list->head);
+
+    return 0;
+}
+
+EXPORT int get_size(void* handle) {
+    return reinterpret_cast<CyclicList*>(handle)->size;
+}
+
+// Записывает до max_size элементов в буфер buffer (выделяется Python'ом).
+EXPORT void get_elements(void* handle, int* buffer, int max_size) {
+    CyclicList* list = reinterpret_cast<CyclicList*>(handle);
+    if (!list->head) return;
+
+    Node* current = list->head;
+    int   i       = 0;
+    do {
+        if (i >= max_size) break;
+        buffer[i++] = current->data;
+        current     = current->next;
+    } while (current != list->head);
+}
+
+EXPORT void clear_list(void* handle) {
+    CyclicList* list = reinterpret_cast<CyclicList*>(handle);
+    if (!list->head) return;
+
+    Node* current = list->head;
+    Node* next_node;
+    do {
+        next_node = current->next;
+        delete current;
+        current   = next_node;
+    } while (current != list->head);
+
+    list->head = nullptr;
+    list->size = 0;
+}
+
+
+============================================================
+FILE: modules/cyclic_list_stl.cpp
+============================================================
+
+/*
+ * cyclic_list_stl.cpp
+ * Циклический список — реализация на контейнерах STL (std::list).
+ * Логика цикличности эмулируется: «последний→первый» реализован через
+ * итераторы std::list и wrap-around доступ.
+ *
+ * Компиляция (Windows/MinGW):
+ *   g++ -shared -o cyclic_list_stl.dll cyclic_list_stl.cpp -std=c++17
+ * Компиляция (Linux):
+ *   g++ -shared -fPIC -o cyclic_list_stl.so cyclic_list_stl.cpp -std=c++17
+ */
+
+#include <list>
+#include <algorithm>
+#include <cstring>
+
+#ifdef _WIN32
+    #define EXPORT extern "C" __declspec(dllexport)
+#else
+    #define EXPORT extern "C"
+#endif
+
+// Используем std::list<int> как внутреннее хранилище.
+// Цикличность (last->next == head) — семантическая: при обходе wrap-around
+// выполняется автоматически через итераторы с проверкой конца списка.
+
+using Container = std::list<int>;
+
+EXPORT void* create_list() {
+    return new Container();
+}
+
+EXPORT void destroy_list(void* handle) {
+    delete reinterpret_cast<Container*>(handle);
+}
+
+EXPORT void add_element(void* handle, int value) {
+    reinterpret_cast<Container*>(handle)->push_back(value);
+}
+
+// Возвращает 1 если найден и удалён, 0 иначе.
+EXPORT int remove_element(void* handle, int value) {
+    auto* lst = reinterpret_cast<Container*>(handle);
+    auto  it  = std::find(lst->begin(), lst->end(), value);
+    if (it != lst->end()) {
+        lst->erase(it);
+        return 1;
+    }
+    return 0;
+}
+
+EXPORT int get_size(void* handle) {
+    return static_cast<int>(reinterpret_cast<Container*>(handle)->size());
+}
+
+EXPORT void get_elements(void* handle, int* buffer, int max_size) {
+    auto* lst = reinterpret_cast<Container*>(handle);
+    int   i   = 0;
+    for (int val : *lst) {
+        if (i >= max_size) break;
+        buffer[i++] = val;
+    }
+}
+
+EXPORT void clear_list(void* handle) {
+    reinterpret_cast<Container*>(handle)->clear();
+}
+
+
