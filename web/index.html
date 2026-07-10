@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moderation Console</title>
+    <link rel="stylesheet" href="/static/styles.css?v=2" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Russian Toxicity Moderation</p>
+          <h1>Moderation Console</h1>
+        </div>
+        <div class="status-strip" aria-label="Статус системы">
+          <span id="modelStatus" class="status-pill">Модель</span>
+          <span id="llmStatus" class="status-pill">LLM</span>
+        </div>
+      </header>
+
+      <section class="metrics-grid" aria-label="Метрики">
+        <article class="metric-tile">
+          <span>Full dataset</span>
+          <strong id="datasetRows">-</strong>
+          <small>комментариев</small>
+        </article>
+        <article class="metric-tile">
+          <span>Layer 2 F1</span>
+          <strong id="modelF1">-</strong>
+          <small>toxic class</small>
+        </article>
+        <article class="metric-tile">
+          <span>Pipeline F1</span>
+          <strong id="chainF1">-</strong>
+          <small>без LLM, full</small>
+        </article>
+        <article class="metric-tile">
+          <span>HF sample F1</span>
+          <strong id="hfF1">-</strong>
+          <small>слой 3</small>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <article class="moderation-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Проверка комментария</h2>
+              <p id="modelLine">-</p>
+            </div>
+            <button id="checkBtn" type="button" class="primary-btn">Проверить</button>
+          </div>
+
+          <label class="editor">
+            <span>Текст комментария</span>
+            <textarea id="comment" maxlength="10000">Спасибо за подробный ответ, стало понятнее.</textarea>
+          </label>
+
+          <div class="sample-row" aria-label="Тестовые сценарии">
+            <button id="btn-layer1" type="button">Слой 1: Словарь</button>
+            <button id="btn-layer2" type="button">Слой 2: Регрессия</button>
+            <button id="btn-layer3" type="button">Слой 3: HF/LLM</button>
+            <button id="btn-long" type="button">Длинный текст</button>
+          </div>
+
+          <div id="highlightedText" class="highlighted-text" hidden>
+            <div class="highlighted-text-header">
+              <span class="highlighted-text-icon">⚠</span>
+              <span>Найденные нарушения в тексте</span>
+            </div>
+            <div id="highlightedContent" class="highlighted-text-body"></div>
+          </div>
+        </article>
+
+        <aside class="verdict-panel" aria-live="polite">
+          <div id="gauge" class="risk-gauge" style="--risk: 0">
+            <div>
+              <span>Risk</span>
+              <strong id="score">0.00</strong>
+            </div>
+          </div>
+          <div class="verdict-copy">
+            <span id="verdictLabel">Ожидает проверки</span>
+            <h2 id="violation">-</h2>
+            <p id="reason">-</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="pipeline" aria-label="Слои модерации">
+        <article class="stage" id="stage-1">
+          <div class="stage-index">1</div>
+          <h3>Словарь</h3>
+          <p>Ожидает</p>
+          <strong>-</strong>
+        </article>
+        <article class="stage" id="stage-2">
+          <div class="stage-index">2</div>
+          <h3>Fast model</h3>
+          <p>Ожидает</p>
+          <strong>-</strong>
+        </article>
+        <article class="stage" id="stage-3">
+          <div class="stage-index">3</div>
+          <h3>Local HF</h3>
+          <p>Ожидает</p>
+          <strong>-</strong>
+        </article>
+      </section>
+
+      <section class="insight-grid">
+        <article class="insight-panel">
+          <h2>Распределение решений</h2>
+          <div id="stageBars" class="bar-list"></div>
+        </article>
+        <article class="insight-panel">
+          <h2>Модель слоя 2</h2>
+          <dl class="model-details">
+            <div><dt>Vectorizer</dt><dd id="vectorizerName">-</dd></div>
+            <div><dt>Model</dt><dd id="modelName">-</dd></div>
+            <div><dt>Threshold</dt><dd id="thresholdValue">-</dd></div>
+            <div><dt>ROC-AUC</dt><dd id="rocValue">-</dd></div>
+          </dl>
+        </article>
+      </section>
+    </main>
+    <script src="/static/app.js?v=2"></script>
+  </body>
+</html>

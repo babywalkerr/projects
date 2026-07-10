@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/toxicity_moderation/__init__.py
+src/toxicity_moderation/config.py
+src/toxicity_moderation/data.py
+src/toxicity_moderation/lexicon.py
+src/toxicity_moderation/llm.py
+src/toxicity_moderation/metrics.py
+src/toxicity_moderation/normalization.py
+src/toxicity_moderation/pipeline.py
+src/toxicity_moderation/taxonomy.py
+src/toxicity_moderation_ru.egg-info/PKG-INFO
+src/toxicity_moderation_ru.egg-info/SOURCES.txt
+src/toxicity_moderation_ru.egg-info/dependency_links.txt
+src/toxicity_moderation_ru.egg-info/top_level.txt
